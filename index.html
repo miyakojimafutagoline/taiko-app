@@ -1023,7 +1023,9 @@ function init(){
   })
   .catch(err => {
     console.error("liff.init エラー:", err);
-    showToast("⚠️ 認証に失敗しました。再読み込みしてください。", "error", 4000);
+    // ★ デバッグ強化: 実際のエラー内容をトーストに表示してiPhone上でも原因を特定できるようにする
+    const detail = (err && err.message) ? err.message : String(err);
+    showToast("⚠️ 認証エラー: " + detail, "error", 8000);
   });
 }
 
