@@ -799,6 +799,8 @@ function showTab(tabId, btn){
     document.getElementById("legendBottom").style.display = "none";
     document.getElementById("yesterdayStats").style.display = "none";
     document.getElementById("yesterdayStatsBlock").style.display = "none";
+    // ★ 修正F: タブ切替のたびに最新の気分データを取得（行き先タブの loadPlaces() と対称に）
+    loadMoodCounts();
   }
 }
 
@@ -1175,37 +1177,64 @@ async function voteMood(mood){
   } catch(err) { _isMoodSubmitting = false; _onGasError(err); }
 }
 
+// ★ 修正H: エラー時にユーザーへトースト通知を追加（旧: console.error のみでUIが空白のまま）
 async function loadMoodCounts(){
   try {
     const data = await callGAS("getTodayMoodCounts");
     renderMood(data);
-  } catch(err) { console.error("getTodayMoodCounts:", err); }
-}
-function renderMood(data){
-  let arr=[];
-  for(let key in data){
-    arr.push({mood:key,count:data[key]});
+  } catch(err) {
+    console.error("getTodayMoodCounts:", err);
+    showToast("⚠️ 気分データの取得に失敗しました。再読み込みしてください。", "error", 4000);
   }
-  arr.sort((a,b)=>b.count-a.count);
+}
 
-  let html="";
-  arr.forEach((m,i)=>{
-    let rank="";
-    if(i==0)rank="🥇";
-    else if(i==1)rank="🥈";
-    else if(i==2)rank="🥉";
+// ★ 修正G: innerHTML+onclick属性展開 → createElement+addEventListener に変更（修正Bと同パターンのXSS対策）
+// ★ 修正E連動: GAS側修正Eにより voteMood() が正しい集計データを返すようになったため、
+//              renderMood() に渡される data が正常な {mood: count, ...} 形式になる
+function renderMood(data){
+  const container = document.getElementById("moodResult");
+  container.innerHTML = "";
 
-    html += `
-      <div class="moodCard">
-        <div class="voteRow">
-          <button onclick="voteMood('${m.mood}')">これ！</button>
-          <div class="voteText">${rank} ${m.mood}：${m.count}人</div>
-        </div>
-      </div>
-    `;
+  // dataが期待する形式でない場合（例: 修正E適用前の { ok: true } など）の防護
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    console.warn("renderMood: 不正なデータ形式", data);
+    return;
+  }
+
+  const arr = [];
+  for (let key in data) {
+    // ★ 数値以外のカウント値（true/false など）をフィルタ（修正E前の残留データへの防護）
+    if (typeof data[key] === "number") {
+      arr.push({ mood: key, count: data[key] });
+    }
+  }
+  arr.sort((a, b) => b.count - a.count);
+
+  arr.forEach((m, i) => {
+    const rank = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "";
+
+    // ★ createElement で安全に構築（気分ラベルに特殊文字が含まれても安全）
+    const card = document.createElement("div");
+    card.className = "moodCard";
+
+    const row = document.createElement("div");
+    row.className = "voteRow";
+
+    const btn = document.createElement("button");
+    btn.textContent = "これ！";
+    // ★ addEventListener でクロージャに m.mood を安全に保持
+    btn.addEventListener("click", () => voteMood(m.mood));
+
+    const text = document.createElement("div");
+    text.className = "voteText";
+    // ★ textContent で設定（HTMLエスケープが自動適用される）
+    text.textContent = rank + " " + m.mood + "：" + m.count + "人";
+
+    row.appendChild(btn);
+    row.appendChild(text);
+    card.appendChild(row);
+    container.appendChild(card);
   });
-
-  document.getElementById("moodResult").innerHTML = html;
 }
 
 /* 区選択 → 行き先読み込み */
