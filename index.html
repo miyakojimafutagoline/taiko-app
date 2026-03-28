@@ -1023,9 +1023,17 @@ function init(){
   })
   .catch(err => {
     console.error("liff.init エラー:", err);
-    // ★ デバッグ強化: 実際のエラー内容をトーストに表示してiPhone上でも原因を特定できるようにする
-    const detail = (err && err.message) ? err.message : String(err);
-    showToast("⚠️ 認証エラー: " + detail, "error", 8000);
+    const msg = (err && err.message) ? err.message : String(err);
+
+    // ★ アクセストークン期限切れ（iPhoneのLINEアプリ内キャッシュで発生）
+    //    → liff.login() で再認証を促す。ユーザーには再ログイン画面が表示される。
+    if (msg.includes("access token") || msg.includes("expired") || msg.includes("FORBIDDEN")) {
+      liff.login();
+      return;
+    }
+
+    // その他の認証エラーはトーストで通知
+    showToast("⚠️ 認証エラー: " + msg, "error", 8000);
   });
 }
 
