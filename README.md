@@ -1,1 +1,1 @@
-# taiko-app
+# tatai-app
