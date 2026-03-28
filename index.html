@@ -1025,9 +1025,12 @@ function init(){
     console.error("liff.init エラー:", err);
     const msg = (err && err.message) ? err.message : String(err);
 
-    // ★ アクセストークン期限切れ（iPhoneのLINEアプリ内キャッシュで発生）
-    //    → liff.login() で再認証を促す。ユーザーには再ログイン画面が表示される。
+    // ★ アクセストークン期限切れへの対処（iPhoneのLINEアプリ内キャッシュで発生）
+    //    liff.logout() でブラウザに残った古いトークンをクリアしてから
+    //    liff.login() で再認証させる。logout()なしだと古いトークンが残り
+    //    login()後も同じエラーがループする場合がある。
     if (msg.includes("access token") || msg.includes("expired") || msg.includes("FORBIDDEN")) {
+      try { liff.logout(); } catch(_) { /* logout失敗は無視 */ }
       liff.login();
       return;
     }
