@@ -999,46 +999,31 @@ function showToast(msg, type, duration) {
 /* 初期化 */
 function init(){
   const LIFF_ID = "2009349674-TujIMf4h";
-  _dbg("init開始");
 
   liff.init({
     liffId: LIFF_ID,
     withLoginOnExternalBrowser: true
   })
   .then(() => {
-    _dbg("liff.init完了 isLoggedIn=" + liff.isLoggedIn());
     if (!liff.isLoggedIn()) {
-      _dbg("liff.login()呼び出し");
       liff.login();
       return;
     }
-    _dbg("getProfile呼び出し");
     return liff.getProfile();
   })
   .then(profile => {
-    if (!profile) { _dbg("profile=null"); return; }
-    _dbg("profile取得: " + profile.displayName);
+    if (!profile) return;
     userId   = profile.userId;
     userName = profile.displayName;
     _initApp();
   })
   .catch(err => {
-    _dbg("エラー: " + err.message);
     console.error("liff.init エラー:", err);
     showToast("⚠️ 認証に失敗しました。再読み込みしてください。", "error", 4000);
   });
 }
 
-function _dbg(msg) {
-  let el = document.getElementById("_debugLog");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "_debugLog";
-    el.style.cssText = "position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font-size:2.8vw;padding:2vw;z-index:99999;word-break:break-all;max-height:50vh;overflow-y:auto;";
-    document.body.appendChild(el);
-  }
-  el.innerHTML += new Date().toLocaleTimeString() + " " + msg + "<br>";
-}
+
 
 async function _initApp(){
   document.getElementById("loginArea").innerHTML =
@@ -1180,8 +1165,8 @@ async function voteMood(mood){
   showLoading();
   _isSubmitting = true;
   try {
-    await callGAS("voteMood", userId, mood);
-    const data = await callGAS("getTodayMoodCounts");
+    // GAS側のvoteMoodはgetTodayMoodCountsの結果も返すので1回で完結
+    const data = await callGAS("voteMood", userId, mood);
     _isSubmitting = false;
     renderMood(data);
     hideLoading();
