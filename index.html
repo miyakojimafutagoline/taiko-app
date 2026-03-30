@@ -779,16 +779,22 @@ h3{ font-size:4vw; margin-bottom:2vw; }
 // ★ GASのエンドポイントURL（デプロイ後に更新不要）
 const GAS_URL = "https://script.google.com/macros/s/AKfycbygvecBlLKQYdcsn-pKCWfFcjKIkdL14ktbvSwUUcs5n8FHYOCl63PctKPBgw_jh_7rTw/exec";
 
+// ★ NS-04対策：共有秘密キー
+// GAS（コードds）の APP_SECRET と必ず同じ値にすること
+// この値は外部に漏らさないでください
+const APP_SECRET = "ここに秘密キーを貼り付ける";
+
 let userId   = "";
 let userName = "";
 
 /* ★ GASをfetchで呼ぶ共通関数
-   Content-Type を text/plain にしてCORSプリフライトを回避 */
+   Content-Type を text/plain にしてCORSプリフライトを回避
+   ★ NS-04対策: 全リクエストに APP_SECRET を付与 */
 async function callGAS(action, ...args) {
   const res = await fetch(GAS_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action, args })
+    body: JSON.stringify({ action, args, secret: APP_SECRET })
   });
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
