@@ -324,6 +324,18 @@ h3{ font-size:4vw; margin-bottom:2vw; }
   <!-- ★ 行き先タブ -->
   <div id="placeTab" class="tab-content">
 
+    <!-- ★ 自分の投票先の状況バナー（施設投票済みのときだけ表示） -->
+    <div id="myPlaceStatus" style="display:none;
+      background:#FFF3E0;
+      border:1px solid #E5E5E5;
+      border-top:3px solid #FF8A00;
+      border-radius:2.5vw;
+      padding:3vw;
+      margin-bottom:4vw;
+      font-size:3.6vw;
+      line-height:1.6;
+    "></div>
+
     <!-- ★ 初見ユーザー向け 3ステップ案内（デザイン強化版） -->
     <div id="guideArea" style="
       background:#FFF8D8;
@@ -407,22 +419,19 @@ h3{ font-size:4vw; margin-bottom:2vw; }
                 border:2px solid #FF8A00;
                 border-right:1px solid #FF8A00;
                 border-radius:2vw 0 0 2vw;
-                padding:2.5vw 1.5vw;
-                font-size:3.2vw;
-                font-weight:bold;
+                padding:3vw 2vw;
+                font-size:3.8vw;
                 display:flex;
-                flex-direction:column;
+                flex-direction:row;
                 align-items:center;
                 justify-content:center;
-                gap:1vw;
+                gap:2vw;
                 box-sizing:border-box;
-                white-space:normal;
-                word-break:keep-all;
+                white-space:nowrap;
                 width:100%;
-                line-height:1.3;
               ">
-                <span>今日はひきこもり</span>
-                <span id="stayHomeCount" style="font-size:3.2vw; color:inherit; font-weight:bold;"></span>
+                <span>今日はおうちにいる</span>
+                <span id="stayHomeCount" style="font-size:3.5vw; color:inherit;"></span>
               </button>
               <!-- 年齢帯別人数：ひきこもりボタンの真下・同幅 -->
               <div id="stayHomeAgeArea" style="
@@ -448,22 +457,19 @@ h3{ font-size:4vw; margin-bottom:2vw; }
                 border:2px solid #FF8A00;
                 border-left:none;
                 border-radius:0 2vw 2vw 0;
-                padding:2.5vw 1.5vw;
-                font-size:3.2vw;
-                font-weight:bold;
+                padding:3vw 2vw;
+                font-size:3.8vw;
                 display:flex;
-                flex-direction:column;
+                flex-direction:row;
                 align-items:center;
                 justify-content:center;
-                gap:1vw;
+                gap:2vw;
                 box-sizing:border-box;
-                white-space:normal;
-                word-break:keep-all;
+                white-space:nowrap;
                 width:100%;
-                line-height:1.3;
               ">
-                <span>出かける/迷ってる</span>
-                <span id="goOutCount" style="font-size:3.2vw; color:inherit; font-weight:bold;"></span>
+                <span>出かける／迷ってる</span>
+                <span id="goOutCount" style="font-size:3.5vw; color:inherit;"></span>
               </button>
               <!-- 年齢帯別人数：出かけるボタンの真下・同幅 -->
               <div id="goOutAgeArea" style="
@@ -1312,7 +1318,60 @@ function _renderFromPayload(payload){
     hideLoading();
     return;
   }
+  // ★ 自分の投票先ステータスを更新
+  _renderMyPlaceStatus(todayCounts);
   _drawPlaceList(placeList, todayCounts, allAges, payload);
+}
+
+/* ★ 自分の投票先の状況バナーを描画
+   表示条件: 今日、特定施設に投票済み（引きこもり・出かける未定は除く）
+   呼び出し元: _renderFromPayload（投票・再描画のたびに自動更新） */
+function _renderMyPlaceStatus(todayCounts){
+  const el = document.getElementById("myPlaceStatus");
+  if (!el) return;
+
+  // 施設に投票していない場合は非表示
+  if (!_todayPlace || _todayPlace === "引きこもり" || _todayPlace === "出かける") {
+    el.style.display = "none";
+    return;
+  }
+
+  const p = todayCounts[_todayPlace];
+  if (!p) {
+    el.style.display = "none";
+    return;
+  }
+
+  const gozen = p["午前行くつもり"]        || 0;
+  const gogo  = p["午後行くつもり"]        || 0;
+  const dareka = p["誰かいくなら行こうかな"] || 0;
+  const total = gozen + gogo + dareka;
+
+  // タイトル行
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:3vw; color:#888; margin-bottom:1.5vw;";
+  title.textContent = "あなたの選んだお出かけ先の状況";
+
+  // 施設名行
+  const name = document.createElement("div");
+  name.style.cssText = "font-size:4vw; font-weight:bold; color:#FF8A00; margin-bottom:1.5vw;";
+  name.textContent = "📍 " + _todayPlace;
+
+  // カウント行
+  const counts = document.createElement("div");
+  counts.style.cssText = "font-size:3.5vw; color:#555;";
+  if (total === 0) {
+    counts.textContent = "まだ他に投票している人はいません";
+  } else {
+    counts.textContent =
+      "午前 " + gozen + "人　午後 " + gogo + "人　🤔 " + dareka + "人";
+  }
+
+  el.innerHTML = "";
+  el.appendChild(title);
+  el.appendChild(name);
+  el.appendChild(counts);
+  el.style.display = "block";
 }
 
 /* ★ DOM描画本体（todayCounts / allAges / placeList が揃った時点で呼ぶ） */
