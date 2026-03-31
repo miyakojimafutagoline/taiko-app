@@ -1090,90 +1090,96 @@ async function _initApp(){
   // placeTabを初期表示
   document.getElementById("placeTab").style.display = "block";
 
-  // 閲覧登録（書き込みのため独立して非同期実行・結果不要）
+
+  // 閲覧登録（結果不要）
   callGAS("registerView", userId).catch(e => console.error("registerView:", e));
 
-  // ★ PR-01修正: 旧設計の9回のGAS呼び出しを getInitPayload の1回に統合
-  try {
-    const init = await callGAS("getInitPayload", userId);
-
-    // ── 年齢帯・投票先を復元
-    if (init.todayAge && init.todayAge.age) {
-      const sel = document.getElementById("ageSelect");
-      if (sel) sel.value = init.todayAge.age;
-    }
-    if (init.todayAge && init.todayAge.place) {
-      if (init.todayAge.place === "引きこもり") {
-        _setTravelChoice("stay");
-      } else {
-        _setTravelChoice("go");
-        _todayPlace = init.todayAge.place;
-        _todayWard  = init.todayAge.ward || "";
+  // 今日の年齢帯・投票先を復元
+  callGAS("getTodayAge", userId)
+    .then(data => {
+      if (data && data.age) {
+        const sel = document.getElementById("ageSelect");
+        if (sel) sel.value = data.age;
       }
-    }
-    if (init.todayAge && !init.todayAge.place && init.todayAge.ward) {
-      _todayWard = init.todayAge.ward;
-    }
+      if (data && data.place) {
+        if (data.place === "引きこもり") {
+          _setTravelChoice("stay");
+        } else {
+          _setTravelChoice("go");
+          _todayPlace = data.place;
+          _todayWard  = data.ward || "";
+        }
+      }
+      if (data && !data.place && data.ward) {
+        _todayWard = data.ward;
+      }
+      _todayAgeReady = true;
+      _tryAutoLoadPlaces();
+    })
+    .catch(err => { console.error("getTodayAge:", err); _todayAgeReady = true; });
 
-    // ── 区一覧をプルダウンに反映
-    const sel = document.getElementById("wardSelect");
-    sel.innerHTML = '<option value="">区を選択してください</option>';
-    (init.wardList || []).forEach(w => {
-      sel.innerHTML += `<option value="${w}">${w}</option>`;
-    });
+  loadMoodCounts();
+  initFeedbackCard();
 
-    // ── 両フラグを同時に立てて区の自動選択をトリガー
-    _wardListReady = true;
-    _todayAgeReady = true;
-    _tryAutoLoadPlaces();
+  // ひきこもり・出かける人数＋年齢帯を取得
+  callGAS("getTodayCounts")
+    .then(counts => {
+      const stayHome = (counts["引きこもり"] && counts["引きこもり"]["なし"]) || 0;
+      const goOut    = (counts["出かける"]   && counts["出かける"]["未定"])   || 0;
+      _updateTravelCounts(stayHome, goOut);
 
-    // ── ひきこもり・出かけるカウント表示
-    const stayHome = (init.todayCounts["引きこもり"] && init.todayCounts["引きこもり"]["なし"]) || 0;
-    const goOut    = (init.todayCounts["出かける"]   && init.todayCounts["出かける"]["未定"])   || 0;
-    _updateTravelCounts(stayHome, goOut);
+      callGAS("getAllAgeBreakdowns")
+        .then(allAges => {
+          setTimeout(() => {
+            _renderStayHomeAge(allAges, stayHome);
+            let goOutTotal4 = 0;
+            const goOutAgeTotal4 = { "🍼0-1": 0, "🐤2-3": 0, "📛未就学": 0, "🏫小学生以上": 0 };
+            for (const place in allAges) {
+              if (place === "引きこもり") continue;
+              for (const t in allAges[place]) {
+                for (const cat in allAges[place][t]) {
+                  if (goOutAgeTotal4[cat] !== undefined) {
+                    goOutAgeTotal4[cat] += allAges[place][t][cat];
+                  }
+                }
+              }
+            }
+            for (const place in counts) {
+              if (place === "引きこもり") continue;
+              const times = counts[place];
+              for (const t in times) goOutTotal4 += times[t];
+            }
+            _updateTravelCounts(stayHome, goOutTotal4);
+            _renderGoOutAgeTotal(goOutAgeTotal4, goOutTotal4);
+          }, 800);
+        })
+        .catch(err => console.error("getAllAgeBreakdowns:", err));
+    })
+    .catch(err => console.error("getTodayCounts:", err));
 
-    // ── 年齢帯別内訳
-    setTimeout(() => {
-      _renderStayHomeAge(init.allAges, stayHome);
-      _updateTravelCounts(stayHome, init.goOutTotal || 0);
-      _renderGoOutAgeTotal(init.goOutAgeTotal || null, init.goOutTotal || 0);
-    }, 300);
+  // 閲覧数
+  callGAS("getTodayViewCount")
+    .then(n => {
+      document.getElementById("viewCount").innerText =
+        "👀 今日このページを見たママパパ " + n + "人";
+    })
+    .catch(err => console.error("getTodayViewCount:", err));
 
-    // ── 閲覧者数
-    document.getElementById("viewCount").innerText =
-      "👀 今日このページを見たママパパ " + (init.viewCount || 0) + "人";
-
-    // ── 気分タブ
-    renderMood(init.moodCounts);
-
-    // ── フィードバックカード
-    if (init.yesterdayVote && !init.alreadyReported) {
-      _feedbackPlace = init.yesterdayVote.place;
-      _feedbackWard  = init.yesterdayVote.ward;
-      const feedbackMsg = init.yesterdayVote.place === "出かける"
-        ? "🚶 昨日お出かけの予定でしたが、多胎家庭と会えましたか？"
-        : "📍 昨日「" + init.yesterdayVote.place + "」に行く予定でしたが、多胎家庭と会えましたか？";
-      document.getElementById("feedbackText").innerText = feedbackMsg;
-      document.getElementById("feedbackCard").style.display = "block";
-    }
-
-  } catch (err) {
-    console.error("getInitPayload エラー:", err);
-    // 失敗時フォールバック：区一覧だけ個別取得してアプリを継続
-    _todayAgeReady = true;
-    callGAS("getWardList")
-      .then(wards => {
-        const s = document.getElementById("wardSelect");
-        s.innerHTML = '<option value="">区を選択してください</option>';
-        wards.forEach(w => { s.innerHTML += `<option value="${w}">${w}</option>`; });
-        _wardListReady = true;
-        _tryAutoLoadPlaces();
-      })
-      .catch(e => {
-        showToast("⚠️ 区一覧の読み込みに失敗しました。ページを再読み込みしてください。", "error", 4000);
-        console.error("getWardList fallback:", e);
+  // 区一覧
+  callGAS("getWardList")
+    .then(wards => {
+      const sel = document.getElementById("wardSelect");
+      sel.innerHTML = '<option value="">区を選択してください</option>';
+      wards.forEach(w => {
+        sel.innerHTML += `<option value="${w}">${w}</option>`;
       });
-  }
+      _wardListReady = true;
+      _tryAutoLoadPlaces();
+    })
+    .catch(err => {
+      showToast("⚠️ 区一覧の読み込みに失敗しました。ページを再読み込みしてください。", "error", 4000);
+      console.error("getWardList:", err);
+    });
 }// ← _initApp() の閉じ
 
 async function refreshFavoriteShortcuts(){
@@ -1460,13 +1466,17 @@ function _drawPlaceList(placeList, todayCounts, allAges, payload){
     const nameDiv = document.createElement("div");
     nameDiv.className = "name";
 
-    // アイコン＋施設名＋詳細バッジ
+    // アイコン＋施設名（青字＋下線でリンクとわかるように）＋詳細バッジ
     const mainSpan = document.createElement("span");
     mainSpan.style.cssText = "display:inline-flex; align-items:center; gap:1.5vw; flex-wrap:wrap;";
 
     const icon = hasTwins ? "🍒" : hasCircle ? "🌸" : "📍";
-    // ★ textContent で施設名を設定（特殊文字を自動エスケープ）
-    mainSpan.appendChild(document.createTextNode(icon + " " + placeName));
+
+    // ★ 施設名をリンク風スタイルに（モーダル内の住所リンクと同じ装飾）
+    const nameText = document.createElement("span");
+    nameText.style.cssText = "color:#1a73e8; text-decoration:underline; font-weight:500;";
+    nameText.textContent = icon + " " + placeName;
+    mainSpan.appendChild(nameText);
 
     const detailBadge = document.createElement("span");
     detailBadge.style.cssText = "font-size:2.8vw; color:#FF8A00; border:1px solid #FF8A00; border-radius:1vw; padding:0.3vw 1.2vw; font-weight:normal; white-space:nowrap;";
