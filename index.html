@@ -6,6 +6,83 @@
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
+/* ===============================================
+   CUSTOM SELECT CSS（.cs- 名前空間で完全分離）
+   既存CSSには一切手を加えない
+   ①フォント継承を明示（iOS Safari対策）
+   =============================================== */
+
+.cs-wrapper {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  touch-action: manipulation;
+}
+
+.cs-trigger {
+  width: 100%;
+  font-family: inherit; /* ★ iOS Safari: 明示しないとページフォントを引き継がない */
+  font-size: 4.5vw;
+  padding: 2.5vw;
+  border-radius: 2vw;
+  border: 1px solid #E5E5E5;
+  background: #FFFFFF;
+  color: #333;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 11vw;
+}
+.cs-trigger.cs-placeholder { color: #888; }
+.cs-trigger::after {
+  content: "▼";
+  font-size: 3vw;
+  color: #888;
+  flex-shrink: 0;
+  margin-left: 2vw;
+  transition: transform 0.15s;
+}
+.cs-wrapper[aria-expanded="true"] .cs-trigger::after {
+  transform: rotate(180deg);
+}
+
+.cs-dropdown {
+  position: fixed;
+  background: #FFFFFF;
+  border: 1px solid #E5E5E5;
+  border-radius: 2vw;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  overflow-y: auto;
+  max-height: 50vh;
+  z-index: 1000;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cs-option {
+  padding: 3.5vw 4vw;
+  font-family: inherit; /* ★ iOS Safari: 明示しないとページフォントを引き継がない */
+  font-size: 4.5vw;
+  color: #333;
+  cursor: pointer;
+  border-bottom: 1px solid #F0F0F0;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cs-option:last-child { border-bottom: none; }
+.cs-option:active { background: #FFF3E0; }
+.cs-option.cs-option--selected {
+  background: #FFF8F0;
+  color: #FF8A00;
+  font-weight: bold;
+}
+
+/* ===============================================
+   CUSTOM SELECT CSS ここまで
+   =============================================== */
+
 /* ============================
    ふたごアプリ 3色テーマ（白・オレンジ・薄グレー）
    ============================ */
@@ -2167,6 +2244,288 @@ function renderAgeBreakdown(data){
 }
 
 
+
+/* ===============================================
+   CUSTOM SELECT MODULE v2
+   wardSelect + ageSelect 両対応
+   汎用化により将来の追加selectも設定1行で対応可能
+   =============================================== */
+
+(function() {
+  "use strict";
+
+  /* ① 環境判定 */
+  var ua = navigator.userAgent || "";
+  var _CS_ENABLED = /Android/i.test(ua) && /Line\//i.test(ua);
+  // デバッグ用: var _CS_ENABLED = true;
+
+  if (!_CS_ENABLED) return;
+
+  /* 対象selectの設定（ここを追加するだけで新しいselectに対応） */
+  var _TARGETS = [
+    {
+      targetId:   "wardSelect",
+      wrapperId:  "cs-wardSelect",
+      dropdownId: "cs-wardSelect-dropdown",
+      placeholder: "区を選択してください",
+      /* onSelect: 区選択時にloadPlaces()を呼ぶ（onchange代替） */
+      onSelect: function() {
+        if (typeof loadPlaces === "function") loadPlaces();
+      }
+    },
+    {
+      targetId:   "ageSelect",
+      wrapperId:  "cs-ageSelect",
+      dropdownId: "cs-ageSelect-dropdown",
+      placeholder: "年齢を選んでください",
+      /* onSelect: ageSelectは選択時の即時アクション不要
+         ボタンタップ時にvalueを読む設計のためnull */
+      onSelect: null
+    }
+  ];
+
+  var _isOpen = false;
+  var _currentDropdownId = null;
+
+  /* ② UIの構築（各targetに対して実行） */
+  function _buildAll() {
+    _TARGETS.forEach(function(cfg) {
+      var sel = document.getElementById(cfg.targetId);
+      if (!sel) return;
+      _buildOne(cfg, sel);
+    });
+    /* loadPlaces()をラップしてwardSelectの自動区復元時の表示同期に対応 */
+    _wrapLoadPlaces();
+  }
+
+  function _buildOne(cfg, originalSel) {
+    /* 既存selectを非表示（削除しない・valueは既存JSが読める） */
+    originalSel.style.display = "none";
+
+    /* wrapper */
+    var wrapper = document.createElement("div");
+    wrapper.id        = cfg.wrapperId;
+    wrapper.className = "cs-wrapper";
+    wrapper.setAttribute("role", "combobox");
+    wrapper.setAttribute("aria-haspopup", "listbox");
+    wrapper.setAttribute("aria-expanded", "false");
+    wrapper.setAttribute("aria-label", cfg.placeholder);
+
+    /* trigger */
+    var trigger = document.createElement("div");
+    trigger.className = "cs-trigger cs-placeholder";
+    trigger.textContent = cfg.placeholder;
+    trigger.setAttribute("tabindex", "0");
+    trigger.setAttribute("role", "button");
+
+    /* dropdown: bodyに直接appendしてoverflow:hidden問題を完全回避 */
+    var dropdown = document.createElement("div");
+    dropdown.id        = cfg.dropdownId;
+    dropdown.className = "cs-dropdown";
+    dropdown.style.display = "none";
+    dropdown.setAttribute("role", "listbox");
+    document.body.appendChild(dropdown);
+
+    wrapper.appendChild(trigger);
+    originalSel.parentNode.insertBefore(wrapper, originalSel.nextSibling);
+
+    _bindEvents(cfg, wrapper, trigger, dropdown, originalSel);
+
+    /* MutationObserver: _initAppがoptionsを動的追加したときに同期 */
+    if (window.MutationObserver) {
+      var observer = new MutationObserver(function() {
+        _syncOptions(cfg, dropdown, originalSel);
+        _syncDisplay(trigger, originalSel, cfg.placeholder);
+      });
+      observer.observe(originalSel, { childList: true });
+    }
+
+    /* ★ HTMLにoptionがあらかじめ存在する場合（ageSelect等）は
+       MutationObserverが発火しないため初期化時に即時同期する */
+    _syncOptions(cfg, dropdown, originalSel);
+  }
+
+  /* ③ イベント制御 */
+  function _bindEvents(cfg, wrapper, trigger, dropdown, originalSel) {
+    trigger.addEventListener("click", function(e) {
+      e.stopPropagation();
+      if (_isOpen && _currentDropdownId === cfg.dropdownId) {
+        _close();
+      } else {
+        _closeAll(); /* 他のdropdownを先に閉じる */
+        _open(cfg, wrapper, trigger, dropdown);
+      }
+    });
+
+    trigger.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (_isOpen && _currentDropdownId === cfg.dropdownId) {
+          _close();
+        } else {
+          _closeAll();
+          _open(cfg, wrapper, trigger, dropdown);
+        }
+      }
+      if (e.key === "Escape") _close();
+    });
+
+    /* スクロール時に閉じる（position:fixedのdropdownがずれるため） */
+    window.addEventListener("scroll", function() {
+      if (_isOpen) _close();
+    }, { passive: true });
+  }
+
+  /* ドキュメント全体のclickで閉じる（1回だけ登録） */
+  document.addEventListener("click", function() {
+    if (_isOpen) _close();
+  });
+
+  /* ④ 開く */
+  function _open(cfg, wrapper, trigger, dropdown) {
+    _isOpen = true;
+    _currentDropdownId = cfg.dropdownId;
+    wrapper.setAttribute("aria-expanded", "true");
+
+    var rect = trigger.getBoundingClientRect();
+    dropdown.style.left     = rect.left + "px";
+    dropdown.style.width    = rect.width + "px";
+    dropdown.style.maxHeight = "50vh";
+    dropdown.style.top      = (rect.bottom + 4) + "px";
+    dropdown.style.bottom   = "";
+    dropdown.style.display  = "block";
+
+    /* 画面下部の余裕が少ない場合は上方向に表示 */
+    var spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 150 && rect.top > spaceBelow) {
+      dropdown.style.top    = "";
+      dropdown.style.bottom = (window.innerHeight - rect.top + 4) + "px";
+      dropdown.style.maxHeight = Math.min(200, rect.top - 8) + "px";
+    }
+  }
+
+  /* ⑤ 閉じる */
+  function _close() {
+    if (!_currentDropdownId) return;
+    var dropdown = document.getElementById(_currentDropdownId);
+    var cfg      = _TARGETS.find(function(t) { return t.dropdownId === _currentDropdownId; });
+    if (cfg) {
+      var wrapper = document.getElementById(cfg.wrapperId);
+      if (wrapper) wrapper.setAttribute("aria-expanded", "false");
+    }
+    if (dropdown) {
+      dropdown.style.display = "none";
+      dropdown.style.top     = "";
+      dropdown.style.bottom  = "";
+    }
+    _isOpen = false;
+    _currentDropdownId = null;
+  }
+
+  function _closeAll() {
+    _TARGETS.forEach(function(cfg) {
+      var dropdown = document.getElementById(cfg.dropdownId);
+      var wrapper  = document.getElementById(cfg.wrapperId);
+      if (dropdown) { dropdown.style.display = "none"; dropdown.style.top = ""; dropdown.style.bottom = ""; }
+      if (wrapper)  wrapper.setAttribute("aria-expanded", "false");
+    });
+    _isOpen = false;
+    _currentDropdownId = null;
+  }
+
+  /* ⑥ options同期 */
+  function _syncOptions(cfg, dropdown, originalSel) {
+    dropdown.innerHTML = "";
+    var options = originalSel.querySelectorAll("option");
+    options.forEach(function(opt) {
+      if (!opt.value) return;
+      var item = document.createElement("div");
+      item.className    = "cs-option";
+      item.textContent  = opt.textContent;
+      item.dataset.value = opt.value;
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", originalSel.value === opt.value ? "true" : "false");
+      if (originalSel.value === opt.value) item.classList.add("cs-option--selected");
+
+      item.addEventListener("click", function(e) {
+        e.stopPropagation();
+        _selectValue(cfg, opt.value, opt.textContent, dropdown, originalSel);
+      });
+      dropdown.appendChild(item);
+    });
+  }
+
+  /* ⑦ 値の選択 */
+  function _selectValue(cfg, value, text, dropdown, originalSel) {
+    originalSel.value = value; /* 既存JSへの橋渡し */
+
+    var trigger = document.querySelector("#" + cfg.wrapperId + " .cs-trigger");
+    if (trigger) {
+      trigger.textContent = value ? text : cfg.placeholder;
+      trigger.classList.toggle("cs-placeholder", !value);
+    }
+
+    dropdown.querySelectorAll(".cs-option").forEach(function(el) {
+      var isSelected = el.dataset.value === value;
+      el.classList.toggle("cs-option--selected", isSelected);
+      el.setAttribute("aria-selected", isSelected ? "true" : "false");
+    });
+
+    _close();
+
+    /* onSelectコールバック（wardSelectはloadPlaces()、ageSelectはなし） */
+    if (typeof cfg.onSelect === "function") cfg.onSelect(value);
+  }
+
+  /* ⑧ 表示同期（wardSelect.valueが外部から変更されたとき） */
+  function _syncDisplay(trigger, originalSel, placeholder) {
+    var val = originalSel.value;
+    if (!val) { trigger.textContent = placeholder; trigger.classList.add("cs-placeholder"); return; }
+    var opt = originalSel.querySelector("option[value=\"" + val + "\"]");
+    trigger.textContent = opt ? opt.textContent : val;
+    trigger.classList.remove("cs-placeholder");
+  }
+
+  /* loadPlaces()ラップ: _tryAutoLoadPlacesがwardSelect.valueを変更後に
+     loadPlaces()を呼ぶため、その時点でwardSelectのカスタムUI表示を同期 */
+  function _wrapLoadPlaces() {
+    if (typeof loadPlaces !== "function") return;
+    var _orig = loadPlaces;
+    loadPlaces = function() {
+      var wardCfg = _TARGETS[0]; /* wardSelect */
+      var wardSel = document.getElementById(wardCfg.targetId);
+      var trigger = document.querySelector("#" + wardCfg.wrapperId + " .cs-trigger");
+      if (wardSel && trigger) _syncDisplay(trigger, wardSel, wardCfg.placeholder);
+      /* 選択済みスタイルも更新 */
+      var dropdown = document.getElementById(wardCfg.dropdownId);
+      if (dropdown) {
+        dropdown.querySelectorAll(".cs-option").forEach(function(el) {
+          var isSel = el.dataset.value === wardSel.value;
+          el.classList.toggle("cs-option--selected", isSel);
+          el.setAttribute("aria-selected", isSel ? "true" : "false");
+        });
+      }
+      _orig.call(this);
+    };
+  }
+
+  /* 初期化 */
+  _buildAll();
+
+  /* ⑨ Android WebView注意点（コメント）
+     - position:fixed で overflow:hidden を突き抜ける（根本対策）
+     - font-family:inherit を CSS に明示（iOS Safari フォント継承問題対策）
+     - touch-action:manipulation で 300ms 遅延を防止
+     - MutationObserver で動的option追加を検知
+     - IIFE + "use strict" でスコープ完全分離
+     - 複数select対応: _TARGETS 配列に追加するだけで拡張可能
+  */
+
+})();
+
+/* ===============================================
+   CUSTOM SELECT MODULE ここまで
+   =============================================== */
 
 init();
 </script>
