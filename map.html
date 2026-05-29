@@ -327,13 +327,14 @@ let currentFilter = "all";
 
 async function loadMapData() {
   try {
-    const res = await fetch(GAS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret: APP_SECRET, action: "getMapData", args: [] })
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    // ★ CORS対策: GETリクエストはプリフライト不要 → CORSエラーを完全回避
+    // 施設情報は公開情報のためAPP_SECRET不要
+    const res = await fetch(GAS_URL + "?action=getMapData", { method: "GET" });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch(e) { throw new Error("レスポンス解析エラー: " + text.substring(0, 100)); }
+    if (data && data.error) throw new Error("GASエラー: " + data.error);
     renderMarkers(data);
     document.getElementById("loading").style.display = "none";
     adjustLayout();
