@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🍒 多胎のつどい・サークル マップ</title>
+
+<!-- Leaflet.js（無料・OSMタイル） -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<style>
+/* ===== リセット・ベース ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; width: 100%; overflow: hidden; }
+body {
+  font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  background: #FFF8F2;
+  color: #333;
+}
+
+/* ===== ヘッダー ===== */
+#header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  background: #FFFFFF;
+  border-bottom: 2px solid #FF8A00;
+  padding: 10px 12px 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+#header h1 {
+  font-size: 4vw;
+  color: #FF8A00;
+  font-weight: bold;
+  margin-bottom: 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== フィルターボタン ===== */
+#filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.filter-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 20px;
+  border: 2px solid #E5E5E5;
+  background: #F5F5F5;
+  font-size: 3.2vw;
+  font-weight: bold;
+  color: #888;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.filter-btn.active {
+  border-color: currentColor;
+  background: white;
+}
+.filter-btn[data-type="all"].active   { color: #555; border-color: #555; background: #F0F0F0; }
+.filter-btn[data-type="サークル"].active { color: #FF7A00; border-color: #FF7A00; background: #FFF3E0; }
+.filter-btn[data-type="つどい"].active  { color: #E040A0; border-color: #E040A0; background: #FCE4F5; }
+
+/* ===== 外部ブラウザで開くバナー ===== */
+#extBanner {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 1000;
+  background: #333;
+  color: white;
+  text-align: center;
+  padding: 9px 12px;
+  font-size: 3.2vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+#extBanner a {
+  color: #FFD600;
+  font-weight: bold;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+/* ===== 地図 ===== */
+#map {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+}
+/* ヘッダー・バナー分のオフセットはJSで設定 */
+
+/* ===== ローディング ===== */
+#loading {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #FFF8F2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  gap: 16px;
+}
+#loading .spinner {
+  width: 40px; height: 40px;
+  border: 4px solid #FFE0B2;
+  border-top-color: #FF8A00;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { font-size: 4vw; color: #888; }
+
+/* ===== エラー ===== */
+#errorMsg {
+  display: none;
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border: 2px solid #FF5252;
+  border-radius: 12px;
+  padding: 20px 24px;
+  text-align: center;
+  z-index: 2000;
+  font-size: 3.8vw;
+  color: #555;
+  max-width: 80vw;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+/* ===== カスタムポップアップ ===== */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18) !important;
+  max-width: 74vw;
+}
+.leaflet-popup-content {
+  margin: 14px 16px !important;
+  font-size: 3.4vw;
+  line-height: 1.7;
+}
+.popup-name {
+  font-size: 4vw;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 6px;
+}
+.popup-type-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 3vw;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+.popup-type-circle { background: #FFF3E0; color: #FF7A00; }
+.popup-type-tsudoi { background: #FCE4F5; color: #E040A0; }
+.popup-type-both   { background: #F3E5F5; color: #7B1FA2; }
+.popup-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-bottom: 3px;
+  color: #555;
+}
+.popup-row .icon { flex-shrink: 0; }
+.popup-link {
+  color: #FF8A00;
+  text-decoration: none;
+  word-break: break-all;
+}
+.popup-link:active { opacity: 0.7; }
+.popup-note {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #F0F0F0;
+  color: #888;
+  font-size: 3vw;
+}
+
+/* ===== 凡例 ===== */
+#legend {
+  position: fixed;
+  right: 10px;
+  z-index: 999;
+  background: white;
+  border-radius: 10px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  font-size: 3vw;
+  line-height: 2;
+}
+.legend-dot {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div id="header">
+  <h1>🍒 多胎のつどい・サークル マップ</h1>
+  <div id="filters">
+    <button class="filter-btn active" data-type="all">📍 すべて</button>
+    <button class="filter-btn" data-type="サークル">🟠 サークル</button>
+    <button class="filter-btn" data-type="つどい">🩷 つどい</button>
+    <button class="filter-btn" data-type="両方">💜 両方</button>
+  </div>
+</div>
+
+<!-- 地図 -->
+<div id="map"></div>
+
+<!-- 凡例 -->
+<div id="legend">
+  <div><span class="legend-dot" style="background:#FF7A00;"></span>サークル</div>
+  <div><span class="legend-dot" style="background:#E040A0;"></span>つどい</div>
+  <div><span class="legend-dot" style="background:#7B1FA2;"></span>両方</div>
+</div>
+
+<!-- 外部ブラウザバナー -->
+<div id="extBanner">
+  📌 地図が動かない場合は
+  <a id="extLink" href="#">ブラウザで開く</a>
+</div>
+
+<!-- ローディング -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p>施設情報を読み込み中…</p>
+</div>
+
+<!-- エラー -->
+<div id="errorMsg">
+  <p>⚠️ 施設情報の取得に失敗しました</p>
+  <p style="font-size:3vw;margin-top:8px;color:#888;">しばらく待ってから再度お試しください</p>
+</div>
+
+<script>
+/* ===== 設定 ===== */
+const GAS_URL    = "https://script.google.com/macros/s/AKfycbygvecBlLKQYdcsn-pKCWfFcjKIkdL14ktbvSwUUcs5n8FHYOCl63PctKPBgw_jh_7rTw/exec";
+const APP_SECRET = "5sgduhdHFOFkmRm5R7EEzjg9VkzJojW3";
+
+// 大阪市都島区付近を初期表示
+const DEFAULT_LAT = 34.7021;
+const DEFAULT_LNG = 135.5311;
+const DEFAULT_ZOOM = 13;
+
+/* ===== レイアウト調整 ===== */
+function adjustLayout() {
+  const headerH = document.getElementById("header").offsetHeight;
+  const bannerH = document.getElementById("extBanner").offsetHeight;
+  const map = document.getElementById("map");
+  map.style.top    = headerH + "px";
+  map.style.bottom = bannerH + "px";
+  const legend = document.getElementById("legend");
+  legend.style.top = (headerH + 10) + "px";
+}
+window.addEventListener("resize", adjustLayout);
+adjustLayout();
+
+/* ===== 外部ブラウザリンク ===== */
+// LINE内ブラウザ → openExternalBrowser=1 パラメータで強制外部起動
+const currentUrl = location.href.split("?")[0];
+document.getElementById("extLink").href =
+  currentUrl + "?openExternalBrowser=1";
+
+/* ===== マーカーカラー設定 ===== */
+const TYPE_COLORS = {
+  "サークル": "#FF7A00",
+  "つどい":   "#E040A0",
+  "両方":     "#7B1FA2"
+};
+const TYPE_BORDER = {
+  "サークル": "#CC5500",
+  "つどい":   "#AD1060",
+  "両方":     "#4A0072"
+};
+
+function createCircleIcon(type) {
+  const fill   = TYPE_COLORS[type]  || "#888888";
+  const stroke = TYPE_BORDER[type]  || "#555555";
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+      <ellipse cx="14" cy="32" rx="5" ry="2.5" fill="rgba(0,0,0,0.18)"/>
+      <path d="M14 2 C7.4 2 2 7.4 2 14 C2 22 14 34 14 34 C14 34 26 22 26 14 C26 7.4 20.6 2 14 2Z"
+            fill="${fill}" stroke="${stroke}" stroke-width="2"/>
+      <circle cx="14" cy="14" r="5" fill="white" opacity="0.85"/>
+    </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: "",
+    iconSize:   [28, 36],
+    iconAnchor: [14, 34],
+    popupAnchor:[0, -34]
+  });
+}
+
+/* ===== 地図初期化 ===== */
+const mapObj = L.map("map", {
+  zoomControl: true,
+  attributionControl: true
+}).setView([DEFAULT_LAT, DEFAULT_LNG], DEFAULT_ZOOM);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 19
+}).addTo(mapObj);
+
+/* ===== データ取得 ===== */
+let allMarkers = []; // { marker, type }
+let currentFilter = "all";
+
+async function loadMapData() {
+  try {
+    const res = await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: APP_SECRET, action: "getMapData", args: [] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderMarkers(data);
+    document.getElementById("loading").style.display = "none";
+    adjustLayout();
+    mapObj.invalidateSize();
+  } catch (err) {
+    console.error("getMapData エラー:", err);
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("errorMsg").style.display = "block";
+  }
+}
+
+/* ===== マーカー描画 ===== */
+function renderMarkers(places) {
+  // 既存マーカーをクリア
+  allMarkers.forEach(m => mapObj.removeLayer(m.marker));
+  allMarkers = [];
+
+  places.forEach(place => {
+    const marker = L.marker(
+      [place.lat, place.lng],
+      { icon: createCircleIcon(place.type) }
+    );
+
+    // ポップアップ内容を構築
+    const typeClass =
+      place.type === "サークル" ? "popup-type-circle" :
+      place.type === "つどい"   ? "popup-type-tsudoi" :
+      "popup-type-both";
+
+    let html = `<div class="popup-name">${escHtml(place.name)}</div>`;
+    html += `<span class="popup-type-badge ${typeClass}">${escHtml(place.type)}</span>`;
+
+    if (place.ward) {
+      html += `<div class="popup-row"><span class="icon">📍</span><span>${escHtml(place.ward)}</span></div>`;
+    }
+    if (place.address) {
+      html += `<div class="popup-row"><span class="icon">🏠</span><span>${escHtml(place.address)}</span></div>`;
+    }
+    if (place.tel) {
+      html += `<div class="popup-row"><span class="icon">📞</span>
+        <a class="popup-link" href="tel:${escHtml(place.tel)}">${escHtml(place.tel)}</a></div>`;
+    }
+    if (place.instaUrl) {
+      html += `<div class="popup-row"><span class="icon">📸</span>
+        <a class="popup-link" href="${escHtml(place.instaUrl)}" target="_blank">Instagram</a></div>`;
+    }
+    if (place.homeUrl) {
+      html += `<div class="popup-row"><span class="icon">🌐</span>
+        <a class="popup-link" href="${escHtml(place.homeUrl)}" target="_blank">ホームページ</a></div>`;
+    }
+    if (place.note) {
+      html += `<div class="popup-note">📝 ${escHtml(place.note)}</div>`;
+    }
+
+    marker.bindPopup(html, { maxWidth: 260 });
+    allMarkers.push({ marker, type: place.type });
+
+    if (shouldShow(place.type, currentFilter)) {
+      marker.addTo(mapObj);
+    }
+  });
+
+  // 全マーカーが見えるようにズーム調整
+  if (allMarkers.length > 0) {
+    const group = L.featureGroup(allMarkers.map(m => m.marker));
+    const bounds = group.getBounds().pad(0.2);
+    mapObj.fitBounds(bounds, { maxZoom: 15 });
+  }
+}
+
+/* ===== フィルター ===== */
+function shouldShow(type, filter) {
+  if (filter === "all") return true;
+  if (filter === "両方") return type === "両方";
+  // "サークル"フィルター → サークル と 両方 を表示
+  if (filter === "サークル") return type === "サークル" || type === "両方";
+  // "つどい"フィルター → つどい と 両方 を表示
+  if (filter === "つどい") return type === "つどい" || type === "両方";
+  return true;
+}
+
+function applyFilter(filter) {
+  currentFilter = filter;
+  allMarkers.forEach(({ marker, type }) => {
+    if (shouldShow(type, filter)) {
+      if (!mapObj.hasLayer(marker)) marker.addTo(mapObj);
+    } else {
+      if (mapObj.hasLayer(marker)) mapObj.removeLayer(marker);
+    }
+  });
+}
+
+document.querySelectorAll(".filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    applyFilter(btn.dataset.type);
+  });
+});
+
+/* ===== XSS対策 ===== */
+function escHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/* ===== 起動 ===== */
+loadMapData();
+</script>
+</body>
+</html>
