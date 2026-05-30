@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍒 多胎のつどい・サークル 一覧</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --orange:    #FF8A00;
+  --orange-lt: #FFF3E0;
+  --orange-md: #FFE0B2;
+  --pink:      #E040A0;
+  --pink-lt:   #FCE4F5;
+  --purple:    #7B1FA2;
+  --purple-lt: #F3E5F5;
+  --gray-bg:   #FAFAFA;
+  --gray-line: #EEEEEE;
+  --text:      #333333;
+  --text-sub:  #777777;
+  --card-w:    340px;
+  --radius:    14px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif;
+  background: var(--gray-bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ===== ヘッダー ===== */
+#header {
+  background: #fff;
+  border-bottom: 3px solid var(--orange);
+  padding: 16px 20px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+.header-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+#header h1 {
+  font-size: clamp(16px, 4.5vw, 22px);
+  font-weight: 700;
+  color: var(--orange);
+  margin-bottom: 10px;
+}
+
+/* ===== フィルター ===== */
+#filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 2px solid var(--gray-line);
+  background: var(--gray-bg);
+  font-size: clamp(11px, 3vw, 13px);
+  font-weight: 700;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: all 0.15s;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: inherit;
+}
+.filter-btn:hover { opacity: 0.8; }
+.filter-btn[data-type="all"].active    { background: #F0F0F0; color: #444; border-color: #888; }
+.filter-btn[data-type="サークル"].active { background: var(--orange-lt); color: var(--orange); border-color: var(--orange); }
+.filter-btn[data-type="つどい"].active   { background: var(--pink-lt);   color: var(--pink);   border-color: var(--pink);   }
+.filter-btn[data-type="両方"].active    { background: var(--purple-lt);  color: var(--purple); border-color: var(--purple); }
+
+/* ===== 件数表示 ===== */
+#countBar {
+  max-width: 1000px;
+  margin: 12px auto 0;
+  padding: 0 16px;
+  font-size: clamp(11px, 3vw, 13px);
+  color: var(--text-sub);
+}
+
+/* ===== メイン ===== */
+#main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* ===== 区ヘッダー ===== */
+.ward-section { margin-bottom: 24px; }
+.ward-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--orange-md);
+}
+.ward-header h2 {
+  font-size: clamp(14px, 3.8vw, 17px);
+  font-weight: 700;
+  color: var(--orange);
+}
+.ward-count {
+  font-size: clamp(10px, 2.5vw, 12px);
+  color: var(--text-sub);
+  background: var(--orange-lt);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* ===== カードグリッド ===== */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
+  gap: 12px;
+}
+
+/* ===== カード ===== */
+.card {
+  background: #fff;
+  border-radius: var(--radius);
+  border: 1px solid var(--gray-line);
+  padding: 14px 16px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+  transition: box-shadow 0.15s, transform 0.15s;
+  animation: fadeIn 0.3s ease both;
+}
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 種別バッジ */
+.type-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: clamp(10px, 2.8vw, 12px);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.badge-circle { background: var(--orange-lt); color: var(--orange); }
+.badge-tsudoi { background: var(--pink-lt);   color: var(--pink);   }
+.badge-both   { background: var(--purple-lt); color: var(--purple); }
+
+/* 施設名 */
+.card-name {
+  font-size: clamp(14px, 3.8vw, 16px);
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+/* 情報行 */
+.card-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+  font-size: clamp(12px, 3.2vw, 13px);
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+.card-row .icon { flex-shrink: 0; font-size: 13px; margin-top: 1px; }
+.card-row a {
+  color: var(--orange);
+  text-decoration: none;
+  word-break: break-all;
+}
+.card-row a:hover { text-decoration: underline; }
+
+/* 備考 */
+.card-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--orange-lt);
+  border-radius: 8px;
+  font-size: clamp(11px, 3vw, 12px);
+  color: #555;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* 最寄り駅（将来追加用） */
+.card-station {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: clamp(12px, 3.2vw, 13px);
+  color: var(--text-sub);
+}
+
+/* リンクボタン行 */
+.card-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: clamp(11px, 2.8vw, 12px);
+  font-weight: 700;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.link-btn:hover { opacity: 0.75; }
+.link-btn-insta { background: var(--pink-lt);   color: var(--pink);   }
+.link-btn-home  { background: var(--orange-lt); color: var(--orange); }
+
+/* ===== ローディング ===== */
+#loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+}
+.spinner {
+  width: 36px; height: 36px;
+  border: 4px solid var(--orange-md);
+  border-top-color: var(--orange);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { font-size: 14px; color: var(--text-sub); }
+
+/* ===== エラー ===== */
+#errorMsg {
+  display: none;
+  text-align: center;
+  padding: 40px 20px;
+  color: #c00;
+  font-size: 14px;
+}
+
+/* ===== 空状態 ===== */
+#emptyMsg {
+  display: none;
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-sub);
+  font-size: 14px;
+}
+
+/* ===== フッター ===== */
+#footer {
+  text-align: center;
+  padding: 24px 16px;
+  font-size: 11px;
+  color: #bbb;
+  border-top: 1px solid var(--gray-line);
+  margin-top: 16px;
+}
+
+/* ===== PCで横幅が広がりすぎないよう調整済み（max-width:1000px） ===== */
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div id="header">
+  <div class="header-inner">
+    <h1>🍒 大阪市 多胎のつどい・サークル 一覧</h1>
+    <div id="filters">
+      <button class="filter-btn active" data-type="all">📍 すべて</button>
+      <button class="filter-btn" data-type="サークル">🟠 サークル</button>
+      <button class="filter-btn" data-type="つどい">🩷 つどい</button>
+      <button class="filter-btn" data-type="両方">💜 両方</button>
+    </div>
+  </div>
+</div>
+
+<div id="countBar"></div>
+
+<!-- メインコンテンツ -->
+<div id="main">
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>情報を読み込み中…</p>
+  </div>
+  <div id="errorMsg">⚠️ 情報の取得に失敗しました。しばらく待ってから再度お試しください。</div>
+  <div id="emptyMsg">該当する施設が見つかりません。</div>
+  <div id="listArea"></div>
+</div>
+
+<div id="footer">
+  情報は変更される場合があります。最新情報は各施設にお問い合わせください。
+</div>
+
+<script>
+const GAS_URL    = "https://script.google.com/macros/s/AKfycbygvecBlLKQYdcsn-pKCWfFcjKIkdL14ktbvSwUUcs5n8FHYOCl63PctKPBgw_jh_7rTw/exec";
+
+let allPlaces = [];
+let currentFilter = "all";
+
+/* ===== データ取得 ===== */
+async function loadData() {
+  try {
+    const res  = await fetch(GAS_URL + "?action=getMapData");
+    const text = await res.text();
+    const data = JSON.parse(text);
+    if (data.error) throw new Error(data.error);
+    allPlaces = data;
+    render();
+    document.getElementById("loading").style.display = "none";
+  } catch (err) {
+    console.error("list エラー:", err);
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("errorMsg").style.display = "block";
+  }
+}
+
+/* ===== フィルター判定 ===== */
+function shouldShow(type, filter) {
+  if (filter === "all") return true;
+  return type === filter;
+}
+
+/* ===== 50音順ソート（区名） ===== */
+function sortByWard(places) {
+  return [...places].sort((a, b) =>
+    a.ward.localeCompare(b.ward, "ja", { sensitivity: "base" })
+  );
+}
+
+/* ===== 区ごとにグループ化 ===== */
+function groupByWard(places) {
+  const map = new Map();
+  for (const p of places) {
+    if (!map.has(p.ward)) map.set(p.ward, []);
+    map.get(p.ward).push(p);
+  }
+  // 区名50音順でMapを並べ直す
+  const sorted = [...map.entries()].sort(([a], [b]) =>
+    a.localeCompare(b, "ja", { sensitivity: "base" })
+  );
+  return sorted; // [[wardName, [places...]], ...]
+}
+
+/* ===== バッジクラス ===== */
+function badgeClass(type) {
+  if (type === "サークル") return "badge-circle";
+  if (type === "つどい")   return "badge-tsudoi";
+  return "badge-both";
+}
+
+/* ===== カードHTML生成 ===== */
+function cardHtml(p) {
+  const badge = `<span class="type-badge ${badgeClass(p.type)}">${esc(p.type)}</span>`;
+  const name  = `<div class="card-name">${esc(p.name)}</div>`;
+
+  let rows = "";
+  if (p.address) rows += row("🏠", esc(p.address));
+  if (p.tel)     rows += row("📞", `<a href="tel:${esc(p.tel)}">${esc(p.tel)}</a>`);
+  if (p.station) rows += row("🚉", esc(p.station)); // 最寄り駅（将来追加）
+
+  const note = p.note
+    ? `<div class="card-note">📝 ${esc(p.note)}</div>`
+    : "";
+
+  let links = "";
+  if (p.instaUrl) links += `<a class="link-btn link-btn-insta" href="${esc(p.instaUrl)}" target="_blank">📸 Instagram</a>`;
+  if (p.homeUrl)  links += `<a class="link-btn link-btn-home"  href="${esc(p.homeUrl)}"  target="_blank">🌐 HP・詳細</a>`;
+  const linkArea = links ? `<div class="card-links">${links}</div>` : "";
+
+  return `<div class="card">${badge}${name}${rows}${note}${linkArea}</div>`;
+}
+
+function row(icon, content) {
+  return `<div class="card-row"><span class="icon">${icon}</span><span>${content}</span></div>`;
+}
+
+/* ===== XSS対策 ===== */
+function esc(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/* ===== 描画 ===== */
+function render() {
+  const filtered = allPlaces.filter(p => shouldShow(p.type, currentFilter));
+  const grouped  = groupByWard(filtered);
+
+  const listArea = document.getElementById("listArea");
+  const emptyMsg = document.getElementById("emptyMsg");
+  const countBar = document.getElementById("countBar");
+
+  if (filtered.length === 0) {
+    listArea.innerHTML = "";
+    emptyMsg.style.display = "block";
+    countBar.textContent = "";
+    return;
+  }
+  emptyMsg.style.display = "none";
+  countBar.textContent = `${filtered.length}件表示中`;
+
+  let html = "";
+  for (const [ward, places] of grouped) {
+    const cards = places.map(cardHtml).join("");
+    html += `
+      <div class="ward-section">
+        <div class="ward-header">
+          <h2>📍 ${esc(ward)}</h2>
+          <span class="ward-count">${places.length}件</span>
+        </div>
+        <div class="card-grid">${cards}</div>
+      </div>`;
+  }
+  listArea.innerHTML = html;
+}
+
+/* ===== フィルターボタン ===== */
+document.querySelectorAll(".filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentFilter = btn.dataset.type;
+    render();
+  });
+});
+
+/* ===== 起動 ===== */
+loadData();
+</script>
+</body>
+</html>
