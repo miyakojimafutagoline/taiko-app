@@ -355,11 +355,8 @@ function groupByWard(places) {
     if (!map.has(p.ward)) map.set(p.ward, []);
     map.get(p.ward).push(p);
   }
-  // 区名50音順でMapを並べ直す
-  const sorted = [...map.entries()].sort(([a], [b]) =>
-    a.localeCompare(b, "ja", { sensitivity: "base" })
-  );
-  return sorted; // [[wardName, [places...]], ...]
+  // スプレッドシートの並び順をそのまま維持
+  return [...map.entries()]; // [[wardName, [places...]], ...]
 }
 
 /* ===== バッジクラス ===== */
